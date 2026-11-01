@@ -25,6 +25,9 @@ const envSchema = z
     SALON_NAME: z.string().min(1).default('Studio Luna'),
     SALON_TIMEZONE: z.string().min(1).default('Europe/Berlin'),
     BOOKING_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
+    CLIENT_IP_HEADER: z.string().optional(),
+    // Render sets this on every service.
+    RENDER: z.string().optional(),
   })
   .refine((env) => env.EMAIL_PROVIDER !== 'resend' || Boolean(env.RESEND_API_KEY), {
     path: ['RESEND_API_KEY'],
@@ -64,5 +67,7 @@ export function loadConfig() {
       timeZone: env.SALON_TIMEZONE,
     },
     bookingRateLimitMax: env.BOOKING_RATE_LIMIT_MAX,
+    // Render's traffic comes through Cloudflare, which sets this header itself.
+    clientIpHeader: env.CLIENT_IP_HEADER ?? (env.RENDER ? 'cf-connecting-ip' : ''),
   };
 }

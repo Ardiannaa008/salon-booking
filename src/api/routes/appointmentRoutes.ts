@@ -1,12 +1,14 @@
 import { Router, type RequestHandler } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import type { BookingService } from '../../services/bookingService.js';
+import type { RateLimitKey } from '../middleware/rateLimitKey.js';
 import { createAppointmentBody, listAppointmentsQuery } from '../schemas.js';
 
 export function appointmentRoutes(
   booking: BookingService,
   requireAdmin: RequestHandler,
   bookingRateLimitMax: number,
+  rateLimitKey: RateLimitKey,
 ): Router {
   const router = Router();
 
@@ -14,6 +16,7 @@ export function appointmentRoutes(
   const limitBookings = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: bookingRateLimitMax,
+    keyGenerator: rateLimitKey,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     message: { error: 'Too many bookings from this connection. Please try again later.' },

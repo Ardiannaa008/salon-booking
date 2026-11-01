@@ -9,6 +9,7 @@ const container = createContainer(config);
 const app = createApp(container.services, {
   adminPassword: config.adminPassword,
   bookingRateLimitMax: config.bookingRateLimitMax,
+  clientIpHeader: config.clientIpHeader,
 });
 
 const server = app.listen(config.port, () => {

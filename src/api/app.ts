@@ -7,6 +7,7 @@ import type { EmailJobService } from '../services/emailJobService.js';
 import type { HealthService } from '../services/healthService.js';
 import { createAdminAuth } from './middleware/adminAuth.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import { createRateLimitKey } from './middleware/rateLimitKey.js';
 import { appointmentRoutes } from './routes/appointmentRoutes.js';
 import { catalogRoutes } from './routes/catalogRoutes.js';
 import { emailJobRoutes } from './routes/emailJobRoutes.js';
@@ -22,13 +23,14 @@ export interface ApiServices {
 export interface ApiOptions {
   adminPassword: string;
   bookingRateLimitMax: number;
+  clientIpHeader: string;
 }
 
 export function createApp(services: ApiServices, options: ApiOptions): express.Express {
   const app = express();
-  const requireAdmin = createAdminAuth(options.adminPassword);
+  const rateLimitKey = createRateLimitKey(options.clientIpHeader);
+  const requireAdmin = createAdminAuth(options.adminPassword, rateLimitKey);
 
-  // The app runs behind one proxy in production, and rate limits need the real visitor IP.
   app.set('trust proxy', 1);
   app.use(
     helmet({
@@ -40,7 +42,7 @@ export function createApp(services: ApiServices, options: ApiOptions): express.E
 
   app.use(healthRoutes(services.health));
   app.use(catalogRoutes(services.catalog, services.booking));
-  app.use(appointmentRoutes(services.booking, requireAdmin, options.bookingRateLimitMax));
+  app.use(appointmentRoutes(services.booking, requireAdmin, options.bookingRateLimitMax, rateLimitKey));
   app.use(emailJobRoutes(services.emailJobs, requireAdmin));
 
   app.use(notFoundHandler);

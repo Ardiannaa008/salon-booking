@@ -153,6 +153,7 @@ Settings come from environment variables. `.env.example` lists them all with no 
 | `SALON_NAME` | `Studio Luna` | The salon name used in emails |
 | `SALON_TIMEZONE` | `Europe/Berlin` | Used to work out which times have already passed |
 | `BOOKING_RATE_LIMIT_MAX` | `5` | Bookings allowed per visitor every 15 minutes |
+| `CLIENT_IP_HEADER` | `cf-connecting-ip` on Render, otherwise empty | The header holding the visitor's real IP, used for rate limits |
 
 **Note:** Resend's test sender, `onboarding@resend.dev`, only delivers to the email address on your own Resend account. To email anyone else, verify a domain in Resend and change `EMAIL_FROM`.
 
