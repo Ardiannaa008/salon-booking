@@ -1,0 +1,43 @@
+{
+  "name": "salon-booking",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monolithic hair salon booking API with PostgreSQL, a Resend email queue and health monitoring",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --import tsx --watch src/server.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node --env-file-if-exists=.env dist/server.js",
+    "worker": "node --env-file-if-exists=.env dist/worker/index.js",
+    "worker:dev": "node --env-file-if-exists=.env --import tsx src/worker/index.ts",
+    "db:local": "tsx scripts/localDb.ts",
+    "migrate": "node --env-file-if-exists=.env node_modules/node-pg-migrate/bin/node-pg-migrate.js up -m migrations",
+    "migrate:down": "node --env-file-if-exists=.env node_modules/node-pg-migrate/bin/node-pg-migrate.js down -m migrations",
+    "seed": "node --env-file-if-exists=.env --import tsx src/data/seed.ts",
+    "typecheck": "tsc --noEmit",
+    "check:layers": "depcruise src --config .dependency-cruiser.cjs",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "check": "npm run typecheck && npm run check:layers && npm test"
+  },
+  "dependencies": {
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.2",
+    "helmet": "^8.3.0",
+    "node-pg-migrate": "^9.0.0",
+    "pg": "^8.23.1",
+    "resend": "^6.37.0",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
+    "dependency-cruiser": "^18.7.0",
+    "embedded-postgres": "^18.6.0-beta.19"
+  }
+}
