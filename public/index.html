@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Studio Luna | Book an appointment</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/">Studio Luna</a>
+      <p class="tagline">Hair salon</p>
+    </header>
+
+    <main class="container">
+      <section id="booking-section">
+        <h1>Book your appointment</h1>
+        <p class="lede">Open Monday to Saturday, 09:00 to 17:00. Appointments last one hour.</p>
+
+        <form id="booking-form" novalidate>
+          <fieldset>
+            <legend><span class="step">1</span> Choose a service</legend>
+            <div id="services" class="service-list" aria-live="polite">
+              <p class="muted">Loading services…</p>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend><span class="step">2</span> Pick a day and time</legend>
+            <label for="date">Day</label>
+            <input id="date" name="date" type="date" required />
+            <div id="slots" class="slot-grid" aria-live="polite">
+              <p class="muted">Choose a day to see free times.</p>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend><span class="step">3</span> Your details</legend>
+            <label for="name">Full name</label>
+            <input id="name" name="name" type="text" autocomplete="name" maxlength="60" required />
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email" autocomplete="email" required />
+            <p class="hint">We'll send your confirmation to this address.</p>
+          </fieldset>
+
+          <p id="form-error" class="error" role="alert" hidden></p>
+          <button id="submit" type="submit" class="primary">Book appointment</button>
+        </form>
+      </section>
+
+      <section id="confirmation" class="confirmation" hidden tabindex="-1">
+        <h1>You're booked!</h1>
+        <p id="confirmation-details"></p>
+        <p class="muted">Your confirmation should arrive in a minute or two.</p>
+        <button id="book-another" type="button" class="secondary">Book another appointment</button>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span id="health-badge" class="badge">Checking status…</span>
+      <a href="/admin.html">Admin</a>
+    </footer>
+
+    <script src="/shared.js"></script>
+    <script src="/booking.js"></script>
+  </body>
+</html>

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Studio Luna | Admin</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/">Studio Luna</a>
+      <p class="tagline">Admin</p>
+    </header>
+
+    <main class="container wide">
+      <form id="login-form" class="login">
+        <h1>Admin sign-in</h1>
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" required />
+        <p id="login-error" class="error" role="alert" hidden></p>
+        <button type="submit" class="primary">Sign in</button>
+      </form>
+
+      <div id="dashboard" hidden>
+        <div class="dashboard-heading">
+          <h1>Dashboard</h1>
+          <button id="sign-out" type="button" class="secondary">Sign out</button>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><span id="count-pending" class="stat-value">–</span><span>Pending</span></div>
+          <div class="stat"><span id="count-sent" class="stat-value">–</span><span>Sent</span></div>
+          <div class="stat"><span id="count-failed" class="stat-value">–</span><span>Failed</span></div>
+        </div>
+
+        <h2>Email queue</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Job</th><th>To</th><th>Status</th><th>Attempts</th><th>Last error</th><th>Created</th></tr>
+            </thead>
+            <tbody id="jobs-body"></tbody>
+          </table>
+        </div>
+
+        <h2>Appointments</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Date</th><th>Time</th><th>Service</th><th>Customer</th><th>Email</th></tr>
+            </thead>
+            <tbody id="appointments-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <span id="health-badge" class="badge">Checking status…</span>
+      <a href="/">Booking page</a>
+    </footer>
+
+    <script src="/shared.js"></script>
+    <script src="/admin.js"></script>
+  </body>
+</html>
