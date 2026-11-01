@@ -3,8 +3,8 @@
 A monolithic backend for a small hair salon. Customers book an appointment on the website and get a confirmation email. The email never goes out during the request: the endpoint saves a job in PostgreSQL, and a background worker sends it through [Resend](https://resend.com), retrying failures.
 
 - **Stack:** Node.js, TypeScript, Express, PostgreSQL, Resend
-- **Live app:** `<add your deployed URL>`
-- **Health endpoint:** `<add your deployed URL>/health`
+- **Live app:** <https://salon-booking-omnf.onrender.com>
+- **Health endpoint:** <https://salon-booking-omnf.onrender.com/health>
 
 ## Architecture
 
@@ -229,14 +229,20 @@ curl http://localhost:3000/email-jobs/3 -H "Authorization: Bearer YOUR_ADMIN_PAS
 
 ## Deployment
 
-The app is one service. The worker runs inside the web process by default, so one deployment handles everything. A long-running host such as Railway is needed, because serverless functions stop between requests and the worker wouldn't keep running.
+The app is one service, deployed on [Render](https://render.com). The worker runs inside the web process by default, so one deployment handles everything. It needs a long-running host, because serverless functions stop between requests and the worker wouldn't keep running.
 
-On Railway:
+On Render:
 
-1. Create a project from this GitHub repo and add a PostgreSQL database.
-2. Set the environment variables, with `DATABASE_URL` referencing the Railway database.
-3. Railway reads `railway.json`, which builds the app, runs migrations before each deploy and uses `/health` as its health check.
-4. Run the seed once, from your computer with `DATABASE_URL` set to the database's public URL: `npm run seed`.
+1. Create a PostgreSQL database.
+2. Create a web service from this GitHub repo, in the same region as the database, with these commands:
+   - **Build:** `npm install --include=dev && npm run build`
+   - **Start:** `npm run migrate && npm run seed && npm start`
+3. Set `DATABASE_URL` to the database's internal URL, and set `EMAIL_PROVIDER`, `RESEND_API_KEY` and `ADMIN_PASSWORD`.
+4. Set the health check path to `/health`.
+
+Migrations and the seed are safe to run on every start: finished migrations are skipped, and the seed won't create duplicates.
+
+Free Render web services sleep after 15 minutes without traffic, which also pauses the worker. Regular health checks from the monitor help keep the app awake, and any pending emails go out as soon as it wakes.
 
 ## Monitoring
 
