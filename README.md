@@ -1,27 +1,32 @@
-# Salon Booking API
+# Salon Booking
 
-A monolithic backend for a small hair salon. Customers book an appointment on the website and get a confirmation email. The email never goes out during the request: the endpoint saves a job in PostgreSQL, and a background worker sends it through [Resend](https://resend.com), retrying failures.
+A booking app for a small hair salon. A customer picks a service and a time, and then gets a confirmation email.
 
-- **Stack:** Node.js, TypeScript, Express, PostgreSQL, Resend
-- **Live app:** <https://salon-booking-omnf.onrender.com>
-- **Health endpoint:** <https://salon-booking-omnf.onrender.com/health>
+The email isn't sent during the booking request. The app adds it to a queue in the database, and a background worker sends it through [Resend](https://resend.com). If sending fails, the worker tries again.
 
-## Architecture
+| | |
+|---|---|
+| **Website** | <https://salon-booking-omnf.onrender.com> |
+| **Health check** | <https://salon-booking-omnf.onrender.com/health> |
+| **Built with** | Node.js, TypeScript, Express, PostgreSQL, Resend |
+| **Hosted on** | Render |
+| **Monitored by** | Asniher |
 
-The code is organized into 4 layers, and each layer only calls the one below it.
+## How it's organized
+
+The code has 4 layers. Each layer only calls the layer below it.
 
 ```mermaid
 flowchart TD
-    Browser["Website (public/)"] --> API
-    Client["curl / Postman"] --> API
-    Monitor["Asniher monitor"] -->|GET /health| API
+    Website["Website"] --> API
+    Monitor["Asniher"] -->|checks /health| API
 
-    subgraph App["Monolith"]
-        API["api<br/>routes, validation, HTTP responses"]
-        Worker["worker<br/>polls for due jobs"]
-        Services["services<br/>business logic, email sending"]
-        Data["data<br/>repositories, all SQL"]
-        Models["models<br/>entities and DTOs"]
+    subgraph App["The app (one codebase, one deployment)"]
+        API["api"]
+        Worker["worker"]
+        Services["services"]
+        Data["data"]
+        Models["models"]
         API --> Services
         Worker --> Services
         Services --> Data
@@ -29,69 +34,64 @@ flowchart TD
     end
 
     Data --> DB[("PostgreSQL")]
-    Services -->|sends email| Resend["Resend"]
+    Services -->|sends emails| Resend["Resend"]
 ```
 
-| Layer | Folder | Responsibility |
+| Layer | Folder | What it does |
 |---|---|---|
-| api | `src/api` | Routes, request validation and HTTP responses. The only place that knows about HTTP. |
-| services | `src/services` | Booking rules, the retry policy and email sending. |
-| data | `src/data` | Repositories. The only place with SQL. |
-| models | `src/models` | Entities and DTOs. Depends on nothing. |
+| **api** | `src/api` | Receives requests, checks the input and sends responses. All HTTP code is here. |
+| **services** | `src/services` | The business rules, such as "the salon is closed on Sundays" and when to retry an email. |
+| **data** | `src/data` | Reads and writes the database. All SQL is here. |
+| **models** | `src/models` | Describes the data, such as what an appointment looks like. |
 
-The worker (`src/worker`) is a second entry point next to the api, so it also goes through `services`. `src/container.ts` wires the layers together.
+The **worker** (`src/worker`) runs in the background. Like the api, it goes through `services`.
 
-`npm run check:layers` enforces these rules with [dependency-cruiser](https://github.com/sverweij/dependency-cruiser), and fails if, for example, a route imports a repository or a service imports Express.
+Running `npm run check:layers` checks these rules automatically. It fails if a layer imports something it shouldn't, such as a route using the database directly.
 
-### How the email queue works
+## How the email queue works
 
-```mermaid
-sequenceDiagram
-    participant C as Customer
-    participant A as POST /appointments
-    participant D as PostgreSQL
-    participant W as Worker
-    participant R as Resend
+1. A customer books an appointment with `POST /appointments`.
+2. The app saves the appointment and an email job with the status `pending`. Both are saved in one transaction, so you can't end up with one and not the other.
+3. The customer gets a response straight away. No email has been sent yet.
+4. Every 5 seconds, the worker looks for email jobs that are ready to send.
+5. The worker sends the email through Resend and updates the job:
 
-    C->>A: Book a slot
-    A->>D: Save appointment + pending job (one transaction)
-    A-->>C: 201 Created
-    loop Every few seconds
-        W->>D: Claim due jobs (FOR UPDATE SKIP LOCKED)
-        W->>R: Send email
-        alt Sent
-            W->>D: status = sent
-        else Failed, retries left
-            W->>D: Keep pending, schedule the retry
-        else Failed, no retries left
-            W->>D: status = failed
-        end
-    end
-```
+| What happened | New status | What happens next |
+|---|---|---|
+| The email was sent | `sent` | Nothing, it's finished |
+| It failed, with retries left | `pending` | It tries again after 1, 5, then 15 minutes |
+| The 3 retries also failed | `failed` | It stops trying and saves the error |
 
-- **Statuses:** every job in `email_jobs` is `pending`, `sent` or `failed`.
-- **Retries:** a failed send is retried 3 times, after 1, 5 and 15 minutes by default. That makes 4 attempts in total.
-- **No lost emails:** the appointment and its job are saved in one transaction.
-- **No double sends:** `SKIP LOCKED` stops two workers claiming the same job, and an idempotency key stops Resend sending twice if a worker crashes mid-job.
+If several workers run at once, `FOR UPDATE SKIP LOCKED` stops them from taking the same job. If a worker crashes partway through, the job can be picked up again, and an idempotency key tells Resend not to send it twice.
 
-## Setup
+## Run it on your computer
 
-You need [Node.js](https://nodejs.org) 22 or newer. Docker isn't required.
+You need [Node.js](https://nodejs.org) 22 or newer. Docker isn't needed.
+
+On Windows, if PowerShell blocks `npm`, type `npm.cmd` instead.
+
+**1. Install the project**
 
 ```bash
 npm install
 cp .env.example .env
 ```
 
-Edit `.env` and set `ADMIN_PASSWORD` and `RESEND_API_KEY`. To try it without a Resend account, set `EMAIL_PROVIDER=fake`.
+**2. Edit `.env`**
 
-Start a local PostgreSQL server and leave it running in its own terminal. You can skip this if you point `DATABASE_URL` at another PostgreSQL server.
+Set your own `ADMIN_PASSWORD`, and add your `RESEND_API_KEY`. To try the app without a Resend account, set `EMAIL_PROVIDER=fake`.
+
+**3. Start the database**
+
+Run this in its own terminal and leave it open. It runs a real PostgreSQL server on your computer.
 
 ```bash
 npm run db:local
 ```
 
-In a second terminal, create the tables, add sample data and start the app:
+**4. Set up the database and start the app**
+
+Run these in a second terminal:
 
 ```bash
 npm run migrate
@@ -99,10 +99,14 @@ npm run seed
 npm run dev
 ```
 
+`migrate` creates the tables, and `seed` adds the salon's services and some sample bookings.
+
+**5. Open the app**
+
 - Booking page: <http://localhost:3000>
 - Admin page: <http://localhost:3000/admin.html>
 
-### Checks
+### Check that everything works
 
 ```bash
 npm run check
@@ -110,9 +114,9 @@ npm run check
 
 This runs the type checker, the layer rules and the unit tests.
 
-### Seeing retries work
+### See the retries working
 
-Set these values in `.env` and restart the app. Each email fails twice and succeeds on the third attempt, with nothing actually sent:
+Put these values in `.env` and restart the app. No real emails are sent. Each email fails twice, then succeeds on the third attempt, and you can watch it happen on the admin page.
 
 ```env
 EMAIL_PROVIDER=fake
@@ -120,50 +124,63 @@ FAKE_EMAIL_FAIL_ATTEMPTS=2
 EMAIL_RETRY_DELAYS_SECONDS=5,5,5
 ```
 
-Set `FAKE_EMAIL_FAIL_ATTEMPTS=99` to see a job end up as `failed`.
+Change the `2` to `99` to see an email end up as `failed`.
 
 ## Environment variables
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `DATABASE_URL` | Yes | | PostgreSQL connection string |
-| `ADMIN_PASSWORD` | Yes | | Password for the admin page and endpoints, at least 8 characters |
-| `RESEND_API_KEY` | With `resend` | | Resend API key |
-| `EMAIL_PROVIDER` | No | `resend` | `resend` sends real emails, `fake` sends nothing |
-| `EMAIL_FROM` | No | `Studio Luna <onboarding@resend.dev>` | Sender address |
-| `EMAIL_MAX_RETRIES` | No | `3` | Retries after the first attempt, minimum 3 |
-| `EMAIL_RETRY_DELAYS_SECONDS` | No | `60,300,900` | Wait before each retry |
-| `FAKE_EMAIL_FAIL_ATTEMPTS` | No | `0` | Attempts per job that fail on purpose with the `fake` provider |
-| `START_WORKER` | No | `true` | Run the worker inside the web server. Set to `false` to use `npm run worker` instead |
-| `WORKER_POLL_INTERVAL_MS` | No | `5000` | How often the worker checks for jobs |
-| `PORT` | No | `3000` | HTTP port |
-| `SALON_NAME` | No | `Studio Luna` | Name used in emails |
-| `SALON_TIMEZONE` | No | `Europe/Berlin` | Timezone for working out which slots have passed |
-| `BOOKING_RATE_LIMIT_MAX` | No | `5` | Bookings allowed per visitor every 15 minutes |
+Settings come from environment variables. `.env.example` lists them all with no real keys.
 
-Resend's test sender, `onboarding@resend.dev`, only delivers to the email address on your own Resend account. To email other people, verify a domain in Resend and change `EMAIL_FROM`.
+**Required**
+
+| Variable | What it's for |
+|---|---|
+| `DATABASE_URL` | The PostgreSQL connection address |
+| `ADMIN_PASSWORD` | The admin password, at least 8 characters |
+| `RESEND_API_KEY` | Your Resend key, needed when `EMAIL_PROVIDER` is `resend` |
+
+**Optional**
+
+| Variable | Default | What it's for |
+|---|---|---|
+| `EMAIL_PROVIDER` | `resend` | `resend` sends real emails, `fake` sends nothing |
+| `EMAIL_FROM` | `Studio Luna <onboarding@resend.dev>` | Who the email comes from |
+| `EMAIL_MAX_RETRIES` | `3` | Retries after the first attempt, minimum 3 |
+| `EMAIL_RETRY_DELAYS_SECONDS` | `60,300,900` | How long to wait before each retry |
+| `FAKE_EMAIL_FAIL_ATTEMPTS` | `0` | With the `fake` provider, how many attempts fail on purpose |
+| `START_WORKER` | `true` | Runs the worker inside the web server. Set to `false` to run it separately with `npm run worker` |
+| `WORKER_POLL_INTERVAL_MS` | `5000` | How often the worker looks for jobs |
+| `PORT` | `3000` | The port the app runs on |
+| `SALON_NAME` | `Studio Luna` | The salon name used in emails |
+| `SALON_TIMEZONE` | `Europe/Berlin` | Used to work out which times have already passed |
+| `BOOKING_RATE_LIMIT_MAX` | `5` | Bookings allowed per visitor every 15 minutes |
+
+**Note:** Resend's test sender, `onboarding@resend.dev`, only delivers to the email address on your own Resend account. To email anyone else, verify a domain in Resend and change `EMAIL_FROM`.
 
 ## API
 
-| Method and path | Access | Description |
+| Request | Who can use it | What it does |
 |---|---|---|
-| `GET /health` | Public | App and database status: 200, or 503 if the database is unreachable |
-| `GET /services` | Public | List services and prices |
-| `GET /availability?date=YYYY-MM-DD` | Public | Free slots for a day |
-| `POST /appointments` | Public, rate limited | Book a slot and queue the confirmation email |
-| `GET /appointments` | Admin | List appointments |
-| `GET /email-jobs?status=pending\|sent\|failed` | Admin | List email jobs |
-| `GET /email-jobs/:id` | Admin | One job's status and attempts |
+| `GET /health` | Everyone | Shows the app and database status |
+| `GET /services` | Everyone | Lists services and prices |
+| `GET /availability?date=YYYY-MM-DD` | Everyone | Shows the free times on a day |
+| `POST /appointments` | Everyone, with a rate limit | Books a time and queues the email |
+| `GET /appointments` | Admin | Lists all bookings |
+| `GET /email-jobs` | Admin | Lists email jobs. Add `?status=pending`, `sent` or `failed` to filter |
+| `GET /email-jobs/:id` | Admin | Shows one email job |
 
-Admin endpoints need the header `Authorization: Bearer <ADMIN_PASSWORD>`.
+Admin requests need this header: `Authorization: Bearer YOUR_ADMIN_PASSWORD`
 
-### Example requests
+## Example requests
 
-**Check health**
+These examples use your local app. To try the live one, replace `http://localhost:3000` with the website address at the top.
+
+### Check the app's health
 
 ```bash
 curl http://localhost:3000/health
 ```
+
+When everything is working, you get `200`:
 
 ```json
 {
@@ -174,7 +191,7 @@ curl http://localhost:3000/health
 }
 ```
 
-If the database is unreachable, this returns `503`:
+If the database can't be reached, you get `503`:
 
 ```json
 {
@@ -185,13 +202,13 @@ If the database is unreachable, this returns `503`:
 }
 ```
 
-**See free times**
+### See the free times
 
 ```bash
 curl "http://localhost:3000/availability?date=2026-11-20"
 ```
 
-**Book an appointment**
+### Book an appointment
 
 ```bash
 curl -X POST http://localhost:3000/appointments \
@@ -199,15 +216,25 @@ curl -X POST http://localhost:3000/appointments \
   -d '{"serviceId":1,"customerName":"Ana Test","customerEmail":"ana@example.com","date":"2026-11-20","startHour":10}'
 ```
 
-Dates must be within the next 60 days, so change the date if this one has passed. The response is `201`, and the email job starts as `pending`:
+Dates must be within the next 60 days, so change the date if this one has passed.
+
+You get `201`, and the email job starts as `pending`:
 
 ```json
 { "appointmentId": 3, "emailJob": { "id": 3, "status": "pending" } }
 ```
 
-Other responses: `400` for invalid input, `404` for an unknown service, `409` if the slot is taken, `422` if it breaks a booking rule such as a date in the past, and `429` for too many bookings.
+If the booking can't be made, you get one of these instead:
 
-**Check on the email**
+| Code | Meaning |
+|---|---|
+| `400` | The input isn't valid |
+| `404` | That service doesn't exist |
+| `409` | Someone already booked that time |
+| `422` | It breaks a rule, such as a date in the past or a Sunday |
+| `429` | Too many bookings from this visitor |
+
+### Check on the email
 
 ```bash
 curl http://localhost:3000/email-jobs/3 -H "Authorization: Bearer YOUR_ADMIN_PASSWORD"
@@ -229,23 +256,23 @@ curl http://localhost:3000/email-jobs/3 -H "Authorization: Bearer YOUR_ADMIN_PAS
 
 ## Deployment
 
-The app is one service, deployed on [Render](https://render.com). The worker runs inside the web process by default, so one deployment handles everything. It needs a long-running host, because serverless functions stop between requests and the worker wouldn't keep running.
+The app runs as one web service on [Render](https://render.com), with the worker running inside it. It needs a server that stays running, because the worker has to keep checking for jobs.
 
-On Render:
+To deploy your own copy:
 
-1. Create a PostgreSQL database.
-2. Create a web service from this GitHub repo, in the same region as the database, with these commands:
+1. Create a PostgreSQL database on Render.
+2. Create a web service from this repo, in the same region as the database, with these commands:
    - **Build:** `npm install --include=dev && npm run build`
    - **Start:** `npm run migrate && npm run seed && npm start`
-3. Set `DATABASE_URL` to the database's internal URL, and set `EMAIL_PROVIDER`, `RESEND_API_KEY` and `ADMIN_PASSWORD`.
+3. Add the environment variables: `DATABASE_URL` (the database's internal URL), `EMAIL_PROVIDER`, `RESEND_API_KEY` and `ADMIN_PASSWORD`.
 4. Set the health check path to `/health`.
 
-Migrations and the seed are safe to run on every start: finished migrations are skipped, and the seed won't create duplicates.
+It's safe for `migrate` and `seed` to run on every start, because finished migrations are skipped and the seed doesn't create duplicates.
 
-Free Render web services sleep after 15 minutes without traffic, which also pauses the worker. Regular health checks from the monitor help keep the app awake, and any pending emails go out as soon as it wakes.
+**Free plan limits:** the app sleeps after 15 minutes without traffic, which also pauses the worker. The monitor's regular checks help keep it awake. The free database expires after 30 days.
 
 ## Monitoring
 
-`GET /health` is monitored on Asniher.
+Asniher checks `GET /health` every 2 minutes.
 
-![Asniher monitor](docs/asniher-monitor.png)
+![Asniher monitor showing the app up with 100% uptime](docs/asniher-monitor.png)
